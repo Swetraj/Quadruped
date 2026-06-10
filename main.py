@@ -1,42 +1,52 @@
-import time
 import pybullet as p
 import pybullet_data
+import time
 
 p.connect(p.GUI)
 p.setAdditionalSearchPath(pybullet_data.getDataPath())
-
-p.resetSimulation()
 p.setGravity(0, 0, -9.81)
-p.setTimeStep(1.0 / 240.0)
+p.loadURDF("plane.urdf")
 
-plane = p.loadURDF("plane.urdf")
-robot = p.loadURDF("robot.urdf", [0, 0, 0], [0, 0, 0, 1], useFixedBase=False)
+robot = p.loadURDF("robot.urdf", [0, 0, 0.0192], useFixedBase=False)
 
-# Dampen contacts — prevents the "launching off screen" behaviour
-p.setPhysicsEngineParameter(
-    enableConeFriction=1,
-    contactBreakingThreshold=0.001,
-    contactSlop=0.001,
-)
+# All 8 controllable joints parsed from your URDF
+# joint index : (name, lower, upper, default)
+JOINTS = {
+    1: ("hip_FL",   -0.67, 0.67,    0.0),
+    2: ("knee_FL",  -0.70, 1.5708,  0.5),
+    5: ("hip_FR",   -0.67, 0.67,    0.0),
+    6: ("knee_FR",  -0.70, 1.5708,  0.5),
+    9: ("hip_RR",   -0.67, 0.67,    0.0),
+    10:("knee_RR",  -0.70, 1.5708,  0.5),
+    13:("hip_RL",   -0.67, 0.67,    0.0),
+    14:("knee_RL",  -0.70, 1.5708,  0.5),
+}
 
-# Kill bounciness on every link (index -1 = base)
-num_joints = p.getNumJoints(robot)
-for link_idx in range(-1, num_joints):
-    p.changeDynamics(
-        robot, link_idx,
-        restitution=0.0,          # no bounce
-        lateralFriction=0.8,      # grip the ground
-        spinningFriction=0.05,
-        rollingFriction=0.01,
-        linearDamping=0.04,
-        angularDamping=0.04,
-        contactStiffness=30000,   # softer spring → less impulse spike
-        contactDamping=1000,
+# Create one slider per joint
+sliders = {}
+for idx, (name, low, high, default) in JOINTS.items():
+    sliders[idx] = p.addUserDebugParameter(name, low, high, default)
+
+# Set initial pose so robot doesn't collapse
+for idx, (name, low, high, default) in JOINTS.items():
+    p.setJointMotorControl2(
+        robot, idx,
+        p.POSITION_CONTROL,
+        targetPosition=default,
+        force=10
     )
 
-# Also set the plane to be non-bouncy
-p.changeDynamics(plane, -1, restitution=0.0, lateralFriction=0.8)
+print("Sliders ready. Drag them in the PyBullet GUI.")
 
 while True:
+    for idx, slider_id in sliders.items():
+        pos = p.readUserDebugParameter(slider_id)
+        p.setJointMotorControl2(
+            robot, idx,
+            p.POSITION_CONTROL,
+            targetPosition=pos,
+            force=10,
+            maxVelocity=2.0
+        )
     p.stepSimulation()
     time.sleep(1.0 / 240.0)
