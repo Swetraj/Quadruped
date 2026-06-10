@@ -157,16 +157,21 @@ class QuadrupedEnv(gym.Env):
 
     # ------------------------------------------------------------------
     def _compute_reward(self, pos, prev_x):
-        forward_reward = (pos[0] - prev_x) * 100.0
-        lateral_penalty = abs(pos[1]) * 0.5
+        forward_reward = (pos[0] - prev_x) * 300.0  # was 100, push harder
+
+        lateral_penalty = abs(pos[1]) * 1.0          # was 0.5, penalise drifting more
+
         _, orn = p.getBasePositionAndOrientation(self._robot, physicsClientId=self._client)
         roll, pitch, _ = p.getEulerFromQuaternion(orn)
         tilt_penalty = (abs(roll) + abs(pitch)) * 0.5
+
         torque_penalty = 0.0
         for idx in self.JOINT_INDICES:
             js = p.getJointState(self._robot, idx, physicsClientId=self._client)
             torque_penalty += abs(js[3]) * 0.001
-        return forward_reward - lateral_penalty - tilt_penalty - torque_penalty + 0.1
+
+        # Remove flat survival bonus — robot was exploiting it by standing still
+        return forward_reward - lateral_penalty - tilt_penalty - torque_penalty
 
     # ------------------------------------------------------------------
     def _is_terminated(self, pos):
